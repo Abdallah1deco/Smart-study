@@ -1,0 +1,223 @@
+import React, { useState, useEffect } from 'react';
+import { pdfjs } from 'react-pdf';
+import { Viewer, Worker } from '@react-pdf-viewer/core';
+import { searchPlugin } from '@react-pdf-viewer/search';
+import '@react-pdf-viewer/core/lib/styles/index.css';
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+
+const App = () => {
+  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfText, setPdfText] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [testQuestions, setTestQuestions] = useState([]);
+  const [library, setLibrary] = useState([]);
+  const [activeTab, setActiveTab] = useState('upload');
+
+  // Load library from localStorage on mount
+  useEffect(() => {
+    const savedLibrary = JSON.parse(localStorage.getItem('pdfLibrary')) || [];
+    setLibrary(savedLibrary);
+  }, []);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type === 'application/pdf') {
+      setPdfFile(file);
+      extractTextFromPdf(file);
+    }
+  };
+
+  const extractTextFromPdf = async (file) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const typedArray = new Uint8Array(e.target.result);
+      const loadingTask = pdfjs.getDocument(typedArray);
+      const pdf = await loadingTask.promise;
+      let fullText = '';
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const text = textContent.items.map(item => item.str).join(' ');
+        fullText += text + '\n';
+      }
+
+      setPdfText(fullText);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleUpload = () => {
+    if (!pdfFile) return;
+
+    const newPdf = {
+      id: Date.now(),
+      name: pdfFile.name,
+      content: pdfText,
+      date: new Date().toLocaleDateString()
+    };
+
+    const updatedLibrary = [...library, newPdf];
+    setLibrary(updatedLibrary);
+    localStorage.setItem('pdfLibrary', JSON.stringify(updatedLibrary));
+    alert('تم حفظ الملف في المكتبة!');
+  };
+
+  const generateTest = async () => {
+    if (!pdfText) {
+      alert('الرجاء تحميل ملف PDF أولاً');
+      return;
+    }
+
+    // Mock questions, replace with your AI backend if needed
+    const mockQuestions = [
+      {
+        question: "ما هو الموضوع الرئيسي الذي يتناوله هذا النص؟",
+        options: ["التاريخ", "العلوم", "الأدب", "الرياضيات"],
+        answer: 1
+      },
+      {
+        question: "ما هي الفكرة الأساسية من الفقرة الأولى؟",
+        options: ["شرح النظرية", "تقديم الأمثلة", "عرض المشكلة", "كل ما سبق"],
+        answer: 3
+      }
+    ];
+    setTestQuestions(mockQuestions);
+  };
+
+  const searchInPdf = () => {
+    // This is just a placeholder: react-pdf-viewer handles search via its UI
+    if (!searchTerm || !pdfText) return;
+    // No-op; actual searching/highlighting is handled by the plugin UI
+  };
+
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold text-center mb-8">منصة الدراسة الذكية</h1>
+
+      <div className="flex mb-6">
+        <button
+          className={`px-4 py-2 ${activeTab === 'upload' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          onClick={() => setActiveTab('upload')}
+        >
+          رفع ملف PDF
+        </button>
+        <button
+          className={`px-4 py-2 ${activeTab === 'library' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          onClick={() => setActiveTab('library')}
+        >
+          مكتبتي
+        </button>
+      </div>
+
+      {activeTab === 'upload' && (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4">رفع ملف PDF جديد</h2>
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={handleFileChange}
+            className="mb-4"
+          />
+
+          {pdfFile && (
+            <div className="mt-4">
+              <button
+                onClick={handleUpload}
+                className="bg-green-500 text-white px-4 py-2 rounded mr-2"
+              >
+                حفظ في المكتبة
+              </button>
+
+              <div className="mt-6">
+                <h3 className="font-medium mb-2">عرض الملف:</h3>
+                <div className="border rounded-lg p-2" style={{ height: '500px' }}>
+                  <Worker workerUrl={`//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`}>
+                    <Viewer fileUrl={URL.createObjectURL(pdfFile)} />
+                  </Worker>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <h3 className="font-medium mb-2">بحث في النص:</h3>
+                <div className="flex">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="ابحث في النص..."
+                    className="border p-2 flex-grow"
+                  />
+                  <button
+                    onClick={searchInPdf}
+                    className="bg-blue-500 text-white px-4 py-2 ml-2 rounded"
+                  >
+                    بحث
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <button
+                  onClick={generateTest}
+                  className="bg-purple-500 text-white px-4 py-2 rounded"
+                >
+                  توليد اختبار بالذكاء الاصطناعي
+                </button>
+
+                {testQuestions.length > 0 && (
+                  <div className="mt-4">
+                    <h3 className="font-medium mb-2">الأسئلة المولدة:</h3>
+                    <ul className="list-disc pl-5">
+                      {testQuestions.map((q, index) => (
+                        <li key={index} className="mb-3">
+                          <p>{q.question}</p>
+                          <ul className="list-[lower-alpha] pl-5 mt-1">
+                            {q.options.map((opt, optIndex) => (
+                              <li key={optIndex}>{opt}</li>
+                            ))}
+                          </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'library' && (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4">مكتبتي</h2>
+
+          {library.length === 0 ? (
+            <p>لا توجد ملفات في المكتبة بعد</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {library.map((item) => (
+                <div key={item.id} className="border p-4 rounded-lg">
+                  <h3 className="font-medium">{item.name}</h3>
+                  <p className="text-sm text-gray-500">تم الرفع: {item.date}</p>
+                  <button
+                    onClick={() => {
+                      setPdfText(item.content);
+                      alert('تم تحميل الملف للعرض');
+                    }}
+                    className="text-blue-500 mt-2"
+                  >
+                    عرض المحتوى
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default App;
